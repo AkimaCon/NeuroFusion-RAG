@@ -79,7 +79,7 @@ User Query
 ## Repository Structure
 
 ```
-eeg-copilot/
+NeuroFusion-RAG/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                  # FastAPI app factory & lifespan
