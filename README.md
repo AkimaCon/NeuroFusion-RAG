@@ -1,426 +1,477 @@
-# 🧠 Agentic EEG Research Copilot
+# 🧠 NeuroFusion-RAG
 
-> A production-style RAG agent for EEG / Neuroscience literature —  
-> built on **FastAPI**, **LangGraph**, **ChromaDB**, and **Hybrid Search**.
-
----
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Repository Structure](#repository-structure)
-3. [Tech Stack](#tech-stack)
-4. [Data Flow](#data-flow)
-5. [LangGraph Node Reference](#langgraph-node-reference)
-6. [Hybrid Search Design](#hybrid-search-design)
-7. [Setup & Installation](#setup--installation)
-8. [Environment Variables](#environment-variables)
-9. [Running the API](#running-the-api)
-10. [API Reference](#api-reference)
-11. [Testing](#testing)
-12. [Roadmap](#roadmap)
+> A local agentic RAG system for EEG / Neuroscience literature using:
+>
+> * FastAPI
+> * LangGraph
+> * ChromaDB
+> * BM25 Hybrid Retrieval
+> * Ollama + Llama3
+> * Streamlit UI
+>
+> Designed for EEG/BCI literature exploration, grounded citation generation, and neuroscience-focused retrieval.
 
 ---
 
-## Architecture Overview
+# Features
 
-```
-User Query
-    │
-    ▼
-┌─────────────────────────────────────────────────────┐
-│                  FastAPI  /query                    │
-│           (QueryRequest → QueryResponse)            │
-└───────────────────────┬─────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────┐
-│               LangGraph Agent Graph                 │
-│                                                     │
-│  ┌──────────────┐    ┌──────────────────────────┐   │
-│  │query_analysis│───▶│   hybrid_retrieval       │   │
-│  │  (expand +   │    │  ┌────────┐ ┌──────────┐ │   │
-│  │  classify)   │    │  │ChromaDB│ │  BM25    │ │   │
-│  └──────────────┘    │  │(dense) │ │(sparse)  │ │   │
-│                      │  └────┬───┘ └────┬─────┘ │   │
-│                      │       └────┬─────┘        │   │
-│                      │      RRF Fusion            │   │
-│                      └──────────────────────────┘   │
-│                              │                       │
-│                              ▼                       │
-│                    ┌─────────────────┐              │
-│                    │   reranking     │              │
-│                    │  (cross-encode) │              │
-│                    └────────┬────────┘              │
-│                             │                       │
-│                             ▼                       │
-│                    ┌─────────────────┐              │
-│                    │   generation    │              │
-│                    │ (GPT-4o + ctx)  │              │
-│                    └────────┬────────┘              │
-│                             │                       │
-│                             ▼                       │
-│                  ┌────────────────────┐             │
-│                  │ citation_validation│             │
-│                  └────────┬───────────┘             │
-│                           │                         │
-│                           ▼                         │
-│                ┌─────────────────────┐              │
-│                │ response_formatting │              │
-│                └─────────────────────┘              │
-└─────────────────────────────────────────────────────┘
-                        │
-                        ▼
-               QueryResponse (JSON)
+* Hybrid RAG retrieval
+
+  * ChromaDB dense retrieval
+  * BM25 sparse retrieval
+  * Reciprocal Rank Fusion (RRF)
+
+* Local LLM inference
+
+  * Ollama
+  * Llama3
+  * Fully offline after model download
+
+* EEG / BCI focused retrieval
+
+* Citation-grounded answers
+
+* FastAPI backend
+
+  * OpenAPI / Swagger docs
+  * Health endpoints
+  * Structured JSON responses
+
+* Streamlit conversational UI
+
+* Optional terminal chat interface
+
+* PDF ingestion pipeline
+
+* LangGraph multi-node orchestration
+
+---
+
+# Architecture Overview
+
+```text
+User Question
+      │
+      ▼
+┌──────────────────────────────────────┐
+│          Streamlit / CLI UI          │
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────┐
+│              FastAPI API             │
+│          /api/v1/query               │
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────┐
+│          LangGraph Pipeline          │
+│                                      │
+│  query_analysis                      │
+│          ↓                           │
+│  hybrid_retrieval                    │
+│     ├── ChromaDB                     │
+│     └── BM25                         │
+│          ↓                           │
+│  reranking                           │
+│          ↓                           │
+│  generation (Ollama Llama3)          │
+│          ↓                           │
+│  citation_validation                 │
+│          ↓                           │
+│  response_formatting                 │
+└────────────────┬─────────────────────┘
+                 │
+                 ▼
+         Citation-grounded Answer
 ```
 
 ---
 
-## Repository Structure
+# Repository Structure
 
-```
+```text
 NeuroFusion-RAG/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py                  # FastAPI app factory & lifespan
-│   ├── schema.py                # Pydantic v2 models (AgentState, Citation, etc.)
-│   ├── config.py                # pydantic-settings env config
 │   ├── api/
-│   │   ├── __init__.py
-│   │   ├── routes.py            # /query, /ingest, /health endpoints
-│   │   └── dependencies.py     # FastAPI Depends() providers
 │   ├── agent/
-│   │   ├── __init__.py
-│   │   ├── graph.py             # LangGraph StateGraph definition
-│   │   └── nodes/
-│   │       ├── __init__.py
-│   │       ├── query_analysis.py
-│   │       ├── hybrid_retrieval.py
-│   │       ├── reranking.py
-│   │       ├── generation.py
-│   │       ├── citation_validation.py
-│   │       └── response_formatting.py
-│   ├── retrieval/
-│   │   ├── __init__.py
-│   │   ├── dense.py             # ChromaDB dense retriever
-│   │   ├── sparse.py            # BM25 sparse retriever (rank-bm25)
-│   │   └── fusion.py            # RRF & linear fusion logic
 │   ├── ingestion/
-│   │   ├── __init__.py
-│   │   ├── pdf_parser.py        # pypdf-based chunking pipeline
-│   │   ├── embedder.py          # sentence-transformers embedding
-│   │   └── indexer.py           # ChromaDB + BM25 index management
-│   └── utils/
-│       ├── __init__.py
-│       ├── logging.py           # structlog configuration
-│       └── timing.py            # latency tracking decorator
-├── tests/
-│   ├── conftest.py
-│   ├── test_schema.py
-│   ├── test_retrieval.py
-│   ├── test_agent.py
-│   └── test_api.py
-├── data/
-│   ├── pdfs/                    # Raw EEG paper PDFs (git-ignored)
-│   └── chroma_db/               # Persistent ChromaDB volume (git-ignored)
+│   ├── retrieval/
+│   ├── utils/
+│   ├── config.py
+│   ├── main.py
+│   └── schema.py
+│
 ├── scripts/
-│   ├── ingest_corpus.py         # CLI: bulk-ingest a folder of PDFs
-│   └── evaluate_retrieval.py    # Retrieval quality metrics (MRR, nDCG)
-├── .env.example
-├── .gitignore
-├── Dockerfile
-├── docker-compose.yml
-├── pyproject.toml               # ruff + mypy config
+│   ├── ingest_corpus.py
+│   ├── evaluate_retrieval.py
+│   └── chat.py
+│
+├── data/
+│   ├── pdfs/
+│   └── chroma_db/
+│
+├── app_ui.py
 ├── requirements.txt
+├── docker-compose.yml
+├── Dockerfile
 └── README.md
 ```
 
 ---
 
-## Tech Stack
+# Tech Stack
 
-| Layer | Library | Purpose |
-|---|---|---|
-| API | FastAPI 0.115 | Async REST + SSE streaming |
-| Agent | LangGraph 0.2 | Stateful multi-node graph execution |
-| LLM | langchain-openai | GPT-4o generation & query analysis |
-| Dense Retrieval | ChromaDB 0.5 | HNSW vector store |
-| Sparse Retrieval | rank-bm25 | BM25Okapi over chunk corpus |
-| Embeddings | sentence-transformers | `BAAI/bge-large-en-v1.5` |
-| PDF Parsing | pypdf | Text + metadata extraction |
-| Validation | Pydantic v2 | Schema, env config, serialisation |
-| Observability | structlog | Structured JSON logging |
-
----
-
-## Data Flow
-
-### Ingestion Pipeline
-
-```
-PDF File
-  │
-  ▼
-pdf_parser.py  ──▶  DocumentChunk list (text + metadata)
-  │
-  ├──▶  embedder.py  ──▶  float[] embeddings
-  │                           │
-  │                           ▼
-  │                     ChromaDB collection
-  │                      (dense index)
-  │
-  └──▶  indexer.py  ──▶  BM25 in-memory corpus
-                           (serialised to disk)
-```
-
-### Query Pipeline (LangGraph)
-
-```
-QueryRequest
-  │
-  ▼
-[query_analysis]      Expand acronyms (e.g. ERP→Event-Related Potential),
-                      classify EEG domain, rewrite for retrieval.
-  │
-  ▼
-[hybrid_retrieval]    Run dense (ChromaDB top-K) + sparse (BM25 top-K)
-                      in parallel; fuse via RRF or linear weighting.
-  │
-  ▼
-[reranking]           Cross-encoder re-scores fused candidates;
-                      keeps top_k_final chunks.
-  │
-  ▼
-[generation]          Constructs grounded prompt with ranked context;
-                      calls GPT-4o with citation instruction template.
-  │
-  ▼
-[citation_validation] Verifies every [N] marker maps to a real chunk;
-                      strips hallucinated citations.
-  │
-  ▼
-[response_formatting] Assembles QueryResponse with latency + token stats.
-```
+| Layer            | Technology            | Purpose                  |
+| ---------------- | --------------------- | ------------------------ |
+| Backend API      | FastAPI               | REST API                 |
+| Agent Framework  | LangGraph             | Multi-node orchestration |
+| Dense Retrieval  | ChromaDB              | Vector database          |
+| Sparse Retrieval | BM25                  | Keyword retrieval        |
+| Embeddings       | sentence-transformers | Semantic embeddings      |
+| Local LLM        | Ollama + Llama3       | Offline generation       |
+| Frontend         | Streamlit             | Chat-style UI            |
+| Parsing          | pypdf                 | PDF ingestion            |
+| Validation       | Pydantic v2           | Schemas/config           |
+| Logging          | structlog             | Structured logs          |
 
 ---
 
-## LangGraph Node Reference
+# Setup & Installation
 
-| Node | Input keys (AgentState) | Output keys |
-|---|---|---|
-| `query_analysis` | `query`, `conversation_history` | `expanded_query`, `retrieval_config` |
-| `hybrid_retrieval` | `expanded_query`, `retrieval_config` | `raw_chunks` |
-| `reranking` | `raw_chunks`, `expanded_query` | `reranked_chunks` |
-| `generation` | `reranked_chunks`, `expanded_query`, `conversation_history` | `draft_answer`, `citations` |
-| `citation_validation` | `draft_answer`, `citations`, `reranked_chunks` | `final_answer`, `citations` |
-| `response_formatting` | all keys | *(returns QueryResponse)* |
+## Prerequisites
 
----
+* Python 3.11+
+* Conda recommended
+* Ollama installed
+* Llama3 model downloaded
+* Windows/Linux/macOS
 
-## Hybrid Search Design
+Recommended RAM:
 
-### Reciprocal Rank Fusion (RRF)
-
-For each retrieved chunk *d*, given rank lists from dense retriever *R_dense*
-and BM25 *R_bm25*:
-
-```
-RRF(d) = 1 / (k + rank_dense(d))  +  1 / (k + rank_bm25(d))
-```
-
-where `k = 60` by default (configurable via `RetrievalConfig.rrf_k`).
-
-### Linear Fusion
-
-```
-score(d) = w * cosine_sim(d)  +  (1 - w) * norm_bm25(d)
-```
-
-where `w = RetrievalConfig.dense_weight` (default 0.6).
-
-BM25 scores are min-max normalised to [0, 1] before fusion.
-
-### Why Hybrid?
-
-Dense retrieval excels at semantic paraphrasing but struggles with rare EEG
-acronyms (ERN, SSVEP, P300). BM25 captures exact keyword overlap for technical
-terms. Fusion consistently outperforms either alone on domain-specific corpora.
+* 8 GB minimum
+* 16 GB recommended for larger models
 
 ---
 
-## Setup & Installation
+# 1. Install Ollama
 
-### Prerequisites
+Download:
 
-- Python 3.11+
-- An OpenAI API key (GPT-4o access)
-- 8 GB RAM recommended (sentence-transformers model)
+[https://ollama.com/download](https://ollama.com/download)
 
-### 1. Clone & create virtual environment
+After installation:
 
 ```bash
-git clone https://github.com/your-org/eeg-copilot.git
-cd eeg-copilot
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+ollama pull llama3
 ```
 
-### 2. Install dependencies
+Test Ollama:
+
+```bash
+ollama run llama3
+```
+
+---
+
+# 2. Clone Repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/NeuroFusion-RAG.git
+cd NeuroFusion-RAG
+```
+
+---
+
+# 3. Create Backend Environment
+
+```bash
+conda create -n neurofusion python=3.11
+conda activate neurofusion
+```
+
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
+pip install ollama
 ```
 
-### 3. Configure environment
+---
+
+# 4. Create Streamlit UI Environment
+
+Using a separate UI environment avoids dependency conflicts.
 
 ```bash
-cp .env.example .env
-# Edit .env — set OPENAI_API_KEY at minimum
+conda create -n neurofusion-ui python=3.11
+conda activate neurofusion-ui
+pip install streamlit requests
 ```
 
-### 4. Ingest your EEG corpus
+---
+
+# 5. Add PDFs
+
+Place EEG / neuroscience PDFs into:
+
+```text
+data/pdfs/
+```
+
+---
+
+# 6. Ingest Corpus
+
+Run:
 
 ```bash
-mkdir -p data/pdfs
-# Copy your EEG PDFs into data/pdfs/
-python scripts/ingest_corpus.py --pdf-dir data/pdfs --collection eeg_papers
+python -m scripts.ingest_corpus --pdf-dir data/pdfs --collection eeg_papers
 ```
 
 This will:
-- Parse and chunk all PDFs
-- Compute `BAAI/bge-large-en-v1.5` embeddings
-- Persist vectors to `data/chroma_db/`
-- Serialise the BM25 corpus index
+
+* Parse PDFs
+* Chunk documents
+* Generate embeddings
+* Build ChromaDB index
+* Build BM25 index
 
 ---
 
-## Environment Variables
+# Running the Application
 
-Copy `.env.example` to `.env` and fill in:
+The system uses 3 processes:
 
-| Variable | Default | Description |
-|---|---|---|
-| `OPENAI_API_KEY` | — | **Required.** OpenAI API key |
-| `OPENAI_MODEL` | `gpt-4o` | Generation model name |
-| `EMBEDDING_MODEL` | `BAAI/bge-large-en-v1.5` | sentence-transformers model |
-| `CHROMA_PERSIST_DIR` | `data/chroma_db` | ChromaDB persistence path |
-| `CHROMA_COLLECTION` | `eeg_papers` | Collection name |
-| `BM25_INDEX_PATH` | `data/bm25_index.pkl` | Serialised BM25 corpus |
-| `LOG_LEVEL` | `INFO` | structlog level |
-| `API_HOST` | `0.0.0.0` | Uvicorn host |
-| `API_PORT` | `8000` | Uvicorn port |
-| `MAX_CHUNK_TOKENS` | `512` | PDF splitting chunk size |
-| `CHUNK_OVERLAP_TOKENS` | `64` | Sliding-window overlap |
+1. Ollama
+2. FastAPI backend
+3. Streamlit frontend
 
 ---
 
-## Running the API
-
-### Development
+# Terminal 1 — Start Ollama
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+ollama run llama3
 ```
 
-### Production (Gunicorn + Uvicorn workers)
+Keep this terminal running.
+
+---
+
+# Terminal 2 — Start FastAPI Backend
 
 ```bash
-gunicorn app.main:app \
-  -k uvicorn.workers.UvicornWorker \
-  --workers 4 \
-  --bind 0.0.0.0:8000
+conda activate neurofusion
+
+uvicorn app.main:app \
+  --reload \
+  --host 0.0.0.0 \
+  --port 8000
 ```
 
-### Docker
+Swagger docs:
 
-```bash
-docker compose up --build
+```text
+http://localhost:8000/docs
+```
+
+Health endpoints:
+
+```text
+http://localhost:8000/health/live
+http://localhost:8000/health/ready
 ```
 
 ---
 
-## API Reference
+# Terminal 3 — Start Streamlit UI
 
-### `POST /query`
+```bash
+conda activate neurofusion-ui
+streamlit run app_ui.py
+```
 
-Submit a research question and receive a grounded answer with citations.
+Open:
 
-**Request body:** `QueryRequest`
+```text
+http://localhost:8501
+```
+
+---
+
+# Optional Terminal Chat Interface
+
+Create:
+
+```text
+scripts/chat.py
+```
+
+Example:
+
+```python
+import requests
+import uuid
+
+URL = "http://localhost:8000/api/v1/query"
+
+while True:
+    q = input("\nAsk EEG Copilot: ")
+
+    if q.lower() in {"exit", "quit", "q"}:
+        break
+
+    payload = {
+        "request_id": str(uuid.uuid4()),
+        "query": q,
+        "retrieval_config": {
+            "strategy": "rrf",
+            "top_k_dense": 5,
+            "top_k_bm25": 5,
+            "top_k_final": 3,
+            "rrf_k": 60,
+            "dense_weight": 0.6,
+            "domain_filter": "bci",
+            "year_min": 1900,
+            "year_max": 2100,
+        },
+        "conversation_history": [],
+        "stream": False,
+    }
+
+    response = requests.post(URL, json=payload, timeout=180)
+    response.raise_for_status()
+
+    data = response.json()
+
+    print("\nAnswer:\n")
+    print(data["answer"])
+```
+
+Install requests:
+
+```bash
+pip install requests
+```
+
+Run:
+
+```bash
+python scripts/chat.py
+```
+
+---
+
+# API Reference
+
+## POST `/api/v1/query`
+
+Submit a neuroscience / EEG research question.
+
+Example request:
 
 ```json
 {
-  "query": "What signal features best discriminate motor imagery classes in EEG-BCI?",
+  "request_id": "test-001",
+  "query": "What is motor imagery in EEG BCI?",
   "retrieval_config": {
     "strategy": "rrf",
-    "top_k_dense": 20,
-    "top_k_bm25": 20,
-    "top_k_final": 5,
-    "domain_filter": "bci"
+    "top_k_dense": 5,
+    "top_k_bm25": 5,
+    "top_k_final": 3,
+    "rrf_k": 60,
+    "dense_weight": 0.6,
+    "domain_filter": "bci",
+    "year_min": 1900,
+    "year_max": 2100
   },
+  "conversation_history": [],
   "stream": false
 }
 ```
 
-**Response:** `QueryResponse`
+Returns:
+
+* Generated answer
+* Retrieved citations
+* Pipeline steps
+* Latency metrics
+
+---
+
+## POST `/api/v1/ingest`
+
+Upload and ingest a PDF into the vector database.
+
+---
+
+## GET `/health/live`
+
+Liveness probe.
+
+---
+
+## GET `/health/ready`
+
+Readiness probe.
+
+---
+
+# Example Pipeline Output
 
 ```json
 {
-  "request_id": "550e8400-e29b-41d4-a716-446655440000",
-  "answer": "Common Spatial Patterns (CSP) combined with log-variance features remain the dominant approach [1]. Recent work has shown that Riemannian geometry-based methods outperform CSP on cross-session tasks [2]...",
-  "citations": [
-    {
-      "citation_id": "...",
-      "chunk_id": "...",
-      "source_file": "blankertz_2008_optimizing.pdf",
-      "page_number": 3,
-      "text": "...",
-      "fusion_score": 0.91,
-      "authors": ["Blankertz, B.", "Tomioka, R."],
-      "year": 2008,
-      "doi": "10.1109/TNSRE.2007.100899"
-    }
-  ],
-  "steps_executed": ["query_analysis", "hybrid_retrieval", "reranking", "generation", "citation_validation", "response_formatting"],
-  "latency_ms": { "query_analysis": 312.4, "hybrid_retrieval": 89.1, "generation": 1803.2 },
-  "token_usage": { "prompt": 2841, "completion": 487, "total": 3328 }
+  "steps_executed": [
+    "query_analysis",
+    "hybrid_retrieval",
+    "reranking",
+    "generation",
+    "citation_validation",
+    "response_formatting"
+  ]
 }
 ```
 
-### `POST /ingest`
+---
 
-Ingest a single PDF file into the hybrid index.
+# Current Limitations
 
-**Request:** `multipart/form-data` with `file` field (PDF)
-
-### `GET /health`
-
-Returns `{"status": "ok", "chroma_docs": N, "bm25_corpus_size": M}`.
+* CPU inference can be slow (~30–60s per generation)
+* Retrieval quality depends heavily on PDF chunking
+* Metadata extraction is basic
+* Reference sections may dominate retrieval without filtering
 
 ---
 
-## Testing
+# Future Improvements
 
-```bash
-# All tests
-pytest tests/ -v
-
-# With coverage
-pytest tests/ --cov=app --cov-report=term-missing
-
-# Specific node tests
-pytest tests/test_agent.py -v -k "retrieval"
-```
+* GPU Ollama inference
+* Better semantic chunking
+* Metadata extraction
+* Conversational memory
+* Streaming responses
+* Multi-user support
+* Citation ranking improvements
+* Frontend improvements
+* Docker deployment
+* Authentication
 
 ---
 
-## Roadmap
+# Notes
 
-- **Step 2** — `app/config.py` (pydantic-settings) + `app/main.py` (FastAPI lifespan)
-- **Step 3** — `app/ingestion/` pipeline (PDF parser, embedder, indexer)
-- **Step 4** — `app/retrieval/` (ChromaDB dense, BM25 sparse, RRF fusion)
-- **Step 5** — `app/agent/nodes/` (all six LangGraph nodes)
-- **Step 6** — `app/agent/graph.py` (StateGraph wiring + conditional edges)
-- **Step 7** — `app/api/` (routes, dependencies, streaming SSE)
-- **Step 8** — `scripts/` (bulk ingest CLI, retrieval evaluation)
-- **Step 9** — `tests/` (full pytest suite with fixtures)
-- **Step 10** — Dockerfile + docker-compose + CI workflow
+This project currently uses:
+
+* Local embeddings
+* Local vector database
+* Local sparse retrieval
+* Local Llama3 inference
+
+No paid API is required.
+
+---
+
+# License
+
+MIT License
