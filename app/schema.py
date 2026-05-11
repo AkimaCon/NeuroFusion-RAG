@@ -374,3 +374,4 @@ class AgentState(TypedDict, total=False):
     latency_ms: Annotated[dict[str, float], "Per-node wall-clock milliseconds"]
     token_usage: Annotated[dict[str, int], "Cumulative token accounting"]
     error: Annotated[str | None, "Non-fatal error message for diagnostics"]
+    response: Annotated[QueryResponse, "Final formatted API response"]
