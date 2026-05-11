@@ -494,8 +494,9 @@ def create_app() -> FastAPI:
     # ── Domain routers ────────────────────────────────────────────────────────
     # Wired in Step 7 when app/api/routes.py is implemented:
     #
-    #   from app.api.routes import router as api_router
-    #   app.include_router(api_router, prefix="/api/v1")
+    from app.api.routes import router as api_router
+    app.include_router(api_router, prefix="/api/v1")
+
 
     return app
 

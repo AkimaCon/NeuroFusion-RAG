@@ -35,52 +35,65 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class OpenAISettings(BaseSettings):
-    """OpenAI / LLM provider configuration."""
+    """LLM provider configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="OPENAI_", extra="ignore")
-
-    api_key: SecretStr = Field(
-        ...,
-        description="OpenAI API key. REQUIRED. Set via OPENAI_API_KEY env var.",
+    model_config = SettingsConfigDict(
+        env_prefix="OPENAI_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
+
     model: str = Field(
-        default="gpt-4o",
-        description="Generation model name (e.g. gpt-4o, gpt-4o-mini).",
+        default="llama3",
+        description="LLM model name.",
     )
+
     temperature: float = Field(
         default=0.1,
         ge=0.0,
         le=2.0,
-        description="Sampling temperature. Low values → deterministic citations.",
+        description="Sampling temperature.",
     )
+
     max_tokens: int = Field(
         default=2048,
         ge=64,
         le=16384,
-        description="Maximum completion tokens for the generation node.",
+        description="Maximum completion tokens.",
     )
+
     request_timeout: float = Field(
         default=60.0,
         gt=0.0,
-        description="HTTP timeout in seconds for OpenAI API calls.",
+        description="HTTP timeout.",
     )
 
-    @field_validator("model")
-    @classmethod
-    def model_must_be_gpt4_class(cls, v: str) -> str:
-        allowed_prefixes = ("gpt-4", "gpt-3.5", "o1", "o3")
-        if not any(v.startswith(p) for p in allowed_prefixes):
-            raise ValueError(
-                f"Model '{v}' is not a recognised OpenAI chat model. "
-                f"Expected prefix one of: {allowed_prefixes}"
-            )
-        return v
+    ollama_host: str = Field(
+        default="http://localhost:11434",
+        description="Ollama local server host.",
+    )
+
+    # @field_validator("model")
+    # @classmethod
+    # def model_must_be_gpt4_class(cls, v: str) -> str:
+    #     allowed_prefixes = ("gpt-4", "gpt-3.5", "o1", "o3")
+    #     if not any(v.startswith(p) for p in allowed_prefixes):
+    #         raise ValueError(
+    #             f"Model '{v}' is not a recognised OpenAI chat model. "
+    #             f"Expected prefix one of: {allowed_prefixes}"
+    #         )
+    #     return v
 
 
 class EmbeddingSettings(BaseSettings):
     """Sentence-transformers embedding model configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="EMBEDDING_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="EMBEDDING_", 
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",)
 
     model_name: str = Field(
         default="BAAI/bge-large-en-v1.5",
@@ -115,7 +128,10 @@ class EmbeddingSettings(BaseSettings):
 class ChromaDBSettings(BaseSettings):
     """ChromaDB vector store configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="CHROMA_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="CHROMA_", 
+                                      env_file=".env",
+                                      env_file_encoding="utf-8",
+                                      extra="ignore",)
 
     persist_dir: Path = Field(
         default=Path("data/chroma_db"),
