@@ -128,7 +128,7 @@ def configure_logging(
             logging.getLevelName(log_level.upper())
         ),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
 

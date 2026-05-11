@@ -37,8 +37,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class OpenAISettings(BaseSettings):
     """OpenAI / LLM provider configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="OPENAI_", extra="ignore")
-
+    model_config = SettingsConfigDict(
+        env_prefix="OPENAI_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
     api_key: SecretStr = Field(
         ...,
         description="OpenAI API key. REQUIRED. Set via OPENAI_API_KEY env var.",
@@ -80,7 +84,11 @@ class OpenAISettings(BaseSettings):
 class EmbeddingSettings(BaseSettings):
     """Sentence-transformers embedding model configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="EMBEDDING_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="EMBEDDING_", 
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",)
 
     model_name: str = Field(
         default="BAAI/bge-large-en-v1.5",
@@ -115,7 +123,10 @@ class EmbeddingSettings(BaseSettings):
 class ChromaDBSettings(BaseSettings):
     """ChromaDB vector store configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="CHROMA_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="CHROMA_", 
+                                      env_file=".env",
+                                      env_file_encoding="utf-8",
+                                      extra="ignore",)
 
     persist_dir: Path = Field(
         default=Path("data/chroma_db"),
